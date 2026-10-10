@@ -69,31 +69,54 @@
 
 
 float servo_motor_duty = 90.0;                  // 舵机动作角度 此处设置为90度
-int duty = 0;
+int duty = 0;                                   // 占空比
+
+/* 电感 */
+// L1 左电感 L4 右电感 L2 中左电感 L3 中右电感 
+volatile float adc_14 = 0.0f;        // 引脚 1.4  → ADC1_CH4_P14      左电感
+volatile float adc_11 = 0.0f;        // 引脚 1.1  → ADC1_CH1_P11      中左电感
+volatile float adc_07 = 0.0f;        // 引脚 0.7  → ADC2_CH7_P07      中右电感
+volatile float adc_06 = 0.0f;        // 引脚 0.6  → ADC2_CH6_P06      右电感
+
+float track_left = 0.0;                  // 左，右电感读数
+float track_right = 0.0;
 
 
 
-float track_left = 1500.0;                  // 左，右电感读数
-float track_right = 1500.0;
+
 
 /* 调参 */
-float Kp = 0.0;                       // 比例增益
-float Kd = 0.0;                       // 微分增益
+float Kp = 30.0;                       // 比例增益
+float Kd = 10.0;                       // 微分增益
 float period_s = 0.005;             // 控制周期
 float alpha = 0.7;                  // 滤波参数 范围(0.0-1.0) 1.0 = 完全不滤波
 
 
+
+/* 中间变量 */
+float e = 0.0;
 float error_last = 0.0f;        // 上一轮偏差 (e)
 float d_filtered = 0.0f;        // D 项滤波记忆
 float d_raw;
 float angle;
-float p_term；
+float p_term;
 float d_term;
 
 
-/* PD */
+
+
+
+/* PD */    // (中断函数 5ms)
 void control_handler(void) {
-    float e = (track_left - track_right) / (track_left + track_right);  // 求差值
+
+    /* 左右电感读取 */
+    adc_14 = (float)adc_mean_filter_convert(ADC1_CH4_P14, 5);           //  adc_mean_filter_convert: 采样 x 次取平均值
+    adc_06 = (float)adc_mean_filter_convert(ADC2_CH6_P06, 5);
+
+    track_left = adc_14;        // 左电感
+    track_right = adc_06;       // 右电感
+
+    e = (track_left - track_right) / (track_left + track_right);  // 求差值
     d_raw = (e - error_last) / period_s;                                // 求导
     error_last = e;                                                     // 把误差给到上一次里面
     d_filtered = alpha * d_raw + (1.0f - alpha) * d_filtered;           // D 项滤波记忆计算
@@ -110,10 +133,20 @@ void control_handler(void) {
 }
 
 
+
+/* 主循环 */
 void main(void)
 {
     clock_init(SYSTEM_CLOCK_96M); 				// 时钟配置及系统初始化<务必保留>
     debug_init();                       		// 调试串口信息初始化
+
+    
+
+    /* 电磁 */
+    adc_init(ADC1_CH4_P14, ADC_12BIT);      // 引脚 1.4
+    adc_init(ADC1_CH1_P11, ADC_12BIT);      // 引脚 1.1
+    adc_init(ADC2_CH7_P07, ADC_12BIT);      // 引脚 0.7
+    adc_init(ADC2_CH6_P06, ADC_12BIT);      // 引脚 0.6
 
 
 
@@ -131,7 +164,7 @@ void main(void)
     /* 舵机 */
     pwm_init(SERVO_PWM, SERVO_FREQ, 0);         // 设置 PA0 物理引脚的 pwm 信号的 0占空比
 
-
+    pit_ms_init(TIM0_PIT, 5, control_handler);   // 5ms 中断
 
     while(1)
     {
@@ -142,9 +175,6 @@ void main(void)
             duty = duty + 25;       // 加速到 8% 保持不变
         }
         
-        pit_ms_init(TIM0_PIT, 5, control_handler);   // 5ms 中断
-
-
     }
 }
 
