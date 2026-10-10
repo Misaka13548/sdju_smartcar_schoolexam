@@ -51,7 +51,7 @@
 #define SERVO_L_MAX             ( 80 )                                           // 定义主板上舵机活动范围最小值(80)
 #define SERVO_R_MAX             ( 100 )                                           // 定义主板上舵机活动范围最大值(100)
 																				// 中线 90 度
-#define SERVO_DUTY(x)         ((float)PWM_DUTY_MAX / (1000.0 / (float)SERVO_FREQ) * (0.5 + (float)(x) / 90.0))
+#define SERVO_DUTY(x)         ((float)PWM_DUTY_MAX / (1000.0f / (float)SERVO_FREQ) * (0.5f + (float)(x) / 90.0f))
 // 这里把角度分为三步转换为了pwm信号的占空比
 // (1) (0.5 + (float)(x) / 90.0)) 填入x获得了舵机需要的脉宽
 // (2) (1000.0 / (float)SERVO_FREQ)) 获得了一帧多少ms
