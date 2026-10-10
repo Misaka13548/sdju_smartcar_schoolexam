@@ -1,0 +1,19 @@
+# 二进制文件：禁止任何换行符转换
+*.LIB   binary
+*.lib   binary
+*.a     binary
+*.hex   binary
+*.bin   binary
+*.png   binary
+*.jpg   binary
+*.pdf   binary
+
+# A51 汇编：强制 LF，避免 Keil/C251 对 CRLF 敏感
+*.A51   text eol=lf
+
+# Keil 工程文件：仓库内统一 LF
+*.uvproj text eol=lf
+*.uvopt  text eol=lf
+
+# 其余文本文件正常处理
+*       text=auto

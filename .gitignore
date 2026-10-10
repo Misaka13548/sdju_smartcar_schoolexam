@@ -1,0 +1,36 @@
+# ============ 第三方库（Gitee 上有，不重复提交）============
+STC32G144K246_100Pin_Library/
+
+# ============ 大文件 / 备份 ============
+*.7z
+*.zip
+*.rar
+backup_20261009/
+
+# ============ Keil / MDK 编译产物 ============
+*.obj
+*.lst
+*.hex
+*.axf
+*.lnp
+*.bak
+*.dep
+*.crf
+*.d
+*.o
+*.plg
+*.htm
+*.map
+*.sct
+*.iex
+*.build_log.htm
+out_file/
+MDK删除临时文件.bat
+
+# ============ 工具目录（非代码）============
+acl-reports/
+
+# ============ 系统文件 ============
+Thumbs.db
+desktop.ini
+.DS_Store
