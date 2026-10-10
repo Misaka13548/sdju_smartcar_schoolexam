@@ -86,8 +86,8 @@ float track_right = 0.0;
 
 
 /* 调参 */
-float Kp = 30.0;                       // 比例增益
-float Kd = 10.0;                       // 微分增益
+float Kp = 15.0;                       // 比例增益
+float Kd = 1.5;                       // 微分增益
 float period_s = 0.005;             // 控制周期
 float alpha = 0.7;                  // 滤波参数 范围(0.0-1.0) 1.0 = 完全不滤波
 
@@ -109,14 +109,30 @@ float d_term;
 /* PD */    // (中断函数 5ms)
 void control_handler(void) {
 
-    /* 左右电感读取 */
+    /* 电感读取 */
     adc_14 = (float)adc_mean_filter_convert(ADC1_CH4_P14, 5);           //  adc_mean_filter_convert: 采样 x 次取平均值
     adc_06 = (float)adc_mean_filter_convert(ADC2_CH6_P06, 5);
+    // adc_11 = (float)adc_mean_filter_convert(ADC1_CH1_P11, 5);
+    // adc_07 = (float)adc_mean_filter_convert(ADC2_CH7_P07, 5);
+
 
     track_left = adc_14;        // 左电感
     track_right = adc_06;       // 右电感
 
-    e = (track_left - track_right) / (track_left + track_right);  // 求差值
+
+
+    /* 除零保护 */
+    if ((track_left + track_right) < 1.0)
+    {
+        e = 0.0;
+    }
+    else
+    {
+        e = (track_left - track_right) / (track_left + track_right);    // 求差值
+    }
+
+
+
     d_raw = (e - error_last) / period_s;                                // 求导
     error_last = e;                                                     // 把误差给到上一次里面
     d_filtered = alpha * d_raw + (1.0f - alpha) * d_filtered;           // D 项滤波记忆计算
@@ -129,7 +145,19 @@ void control_handler(void) {
 
     angle = 90.0f - (p_term + d_term);                                  // 角度 = 中值 - (p项 + d项)
 
-    pwm_set_duty(SERVO_PWM, (uint32)SERVO_DUTY(angle));                 // 驱动
+
+
+    /* 角度限幅 */          // 这个有问题，不知道舵机角度极限，防烧舵机
+    if (angle < SERVO_L_MAX) {
+        angle = SERVO_L_MAX;
+    }
+    if (angle > SERVO_R_MAX) {
+        angle = SERVO_R_MAX;
+    }
+
+
+
+    pwm_set_duty(SERVO_PWM, (uint32)SERVO_DUTY(angle));                 // 驱动舵机
 }
 
 
