@@ -67,6 +67,13 @@
 
 
 
+/* 路况判断相关变量 */
+
+#define STATE_NORMAL        ( 0 )       // 正常循迹（含直道、弯道）
+#define STATE_CROSS         ( 1 )       // 十字路口
+#define STATE_ROUNDABOUT    ( 2 )       // 环岛
+
+
 
 float servo_motor_duty = 90.0;                  // 舵机动作角度 此处设置为90度
 int duty = 0;                                   // 占空比
@@ -93,20 +100,55 @@ float alpha = 0.7;                  // 滤波参数 范围(0.0-1.0) 1.0 = 完全不滤波
 
 
 
-/* 中间变量 */
+/* PD 中间变量 */
 float e = 0.0;
 float error_last = 0.0f;        // 上一轮偏差 (e)
 float d_filtered = 0.0f;        // D 项滤波记忆
 float d_raw;
-float angle;
+float angle = 90.0;
 float p_term;
 float d_term;
 
+/* 状态参数 */
+volatile uint8 track_state = STATE_NORMAL;  // 默认状态参数为直道
+float angle_hold = 90.0;                    // 锁角度
+uint16 cross_timer = 0.0;                    // 路口计时器  
 
 
 
+/* 路况电磁判断函数 */
+/* (十字路口 逻辑还没写w)
+void cross_detect(void) {
 
-/* PD */    // (中断函数 5ms)
+}
+void cross_exit(void) {
+
+}
+*/
+
+/* (环岛 逻辑还没写w)
+void roundabout_detect(void){
+
+}
+void roundabout_exit(void){
+
+}
+*/
+
+
+
+/* 路况执行函数 */
+void cross_run(void) {    // 十字路口执行函数 效果：锁角度
+    angle = angle_hold;
+}
+
+/*  (环岛 逻辑还没写w)
+void roundabout_enter(void){
+
+}
+*/
+
+/* 中断函数 5ms */
 void control_handler(void) {
 
     /* 电感读取 */
@@ -121,41 +163,97 @@ void control_handler(void) {
 
 
 
-    /* 除零保护 */
-    if ((track_left + track_right) < 1.0)
+
+
+
+    /* 状态机 */
+    switch (track_state) {
+        case STATE_NORMAL:
+            if (cross_detect()) {              // 检测到十字路口 进入该逻辑 若进入 切换为 STATE_CROSS
+                track_state = STATE_CROSS;
+                angle_hold = angle;            // 锁定进入时的角度
+                cross_timer = 0;               // 路口计时器清零
+            }
+            /* (十字未测试 保留)
+            else if (roundabout_detect())      // 检测到环岛路口 进入该逻辑 若进入 切换为 STATE_ROUNDABOUT
+            {
+                track_state = STATE_ROUNDABOUT;
+                roundabout_enter();
+            }
+            */
+            break;
+
+
+        case STATE_CROSS:
+            cross_timer++;                     // 路口计时器每一次中断+5ms 最后靠电磁特征和计时器共同判断是否走出十字路口
+            if (cross_exit())                  // 检测是否脱离十字路口 若脱离 切换为 STATE_NORMAL
+            {
+                track_state = STATE_NORMAL;    // 回到正常循迹
+                error_last = e;                // 干净退出
+                d_filtered = 0.0f;             // 清除滤波记忆 防止被干扰
+            }
+            break;
+
+        /*  (十字未测试 保留)
+        case STATE_ROUNDABOUT:
+        if (roundabout_exit())
+            {
+                track_state = STATE_NORMAL;    // 回到正常循迹
+            }
+            break;
+        */
+    }
+
+
+
+    /* 舵机执行 */
+    if (track_state == STATE_NORMAL) {      // 直线/弯道 状态
+        // PD 计算
+        // 除零保护
+        if ((track_left + track_right) < 1.0)
+        {
+            e = 0.0;
+        }
+        else
+        {
+            e = (track_left - track_right) / (track_left + track_right);    // 求差值
+        }
+        d_raw = (e - error_last) / period_s;                                // 求导
+        error_last = e;                                                     // 把误差给到上一次里面
+        d_filtered = alpha * d_raw + (1.0f - alpha) * d_filtered;           // D 项滤波记忆计算
+
+        p_term = Kp * e;                                                    // 计算比例项                                                 
+        // 偏得越多，打角越多
+
+        d_term = Kd * d_filtered;                                           // 计算微分项
+        // 偏得越快，提前打角越多 (阻尼)                                        // (如果使用 d_raw 就是不滤波)
+
+        angle = 90.0f - (p_term + d_term);                                  // 角度 = 中值 - (p项 + d项)
+
+
+        // 角度限幅           // 这个有问题，不知道舵机角度极限，防烧舵机
+        if (angle < SERVO_L_MAX) {
+            angle = SERVO_L_MAX;
+        }
+        if (angle > SERVO_R_MAX) {
+            angle = SERVO_R_MAX;
+        }
+
+    }
+    else if (track_state == STATE_CROSS)    // 十字路口状态
     {
-        e = 0.0;
+        cross_run();                          // 里面只输出一次，不卡住
     }
-    else
+
+    /*  (十字未测试 保留)
+    else if (track_state == STATE_ROUNDABOUT)   // 环岛状态
     {
-        e = (track_left - track_right) / (track_left + track_right);    // 求差值
+        roundabout_run();
     }
+    */
 
 
-
-    d_raw = (e - error_last) / period_s;                                // 求导
-    error_last = e;                                                     // 把误差给到上一次里面
-    d_filtered = alpha * d_raw + (1.0f - alpha) * d_filtered;           // D 项滤波记忆计算
-
-    p_term = Kp * e;                                                    // 计算比例项                                                 
-    // 偏得越多，打角越多
-
-    d_term = Kd * d_filtered;                                           // 计算微分项
-    // 偏得越快，提前打角越多 (阻尼)                                        // (如果使用 d_raw 就是不滤波)
-
-    angle = 90.0f - (p_term + d_term);                                  // 角度 = 中值 - (p项 + d项)
-
-
-
-    /* 角度限幅 */          // 这个有问题，不知道舵机角度极限，防烧舵机
-    if (angle < SERVO_L_MAX) {
-        angle = SERVO_L_MAX;
-    }
-    if (angle > SERVO_R_MAX) {
-        angle = SERVO_R_MAX;
-    }
-
-
+        
 
     pwm_set_duty(SERVO_PWM, (uint32)SERVO_DUTY(angle));                 // 驱动舵机
 }
